@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  FACEBOOK
+  APPLE
+}
+
+enum Role {
+  ADMIN
+  FLEET_OWNER
+  MASTER_AGENT
+  SUB_AGENT
+  INDIVIDUAL_PARTNER
+  ENTERPRISE_PARTNER
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  ACTIVE
+  RESERVED
+  BOOKED
+  UNAVAILABLE
+}
+
+enum VehicleCategory {
+  ECONOMY
+  EXECUTIVE
+  VIP
+}
+
+model User {
+  id       Int     @id @default(autoincrement())
+  fullName String
+  email    String  @unique
+  password String?
+  phone    String?
+  role     Role
+
+  authProvider AuthProvider @default(LOCAL)
+  providerId   String?
+
+  isVerified Boolean @default(false)
+  isActive   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  masterAgentId Int?
+
+  bookings      Booking[]      @relation("AgentBookings")
+  fleetOwner    FleetOwner?
+  refreshTokens RefreshToken[]
+  enterprise    Enterprise?
+  wallet        Wallet?
+  notifications Notification[]
+  shipments     Shipment[]     @relation("AgentShipments")
+
+  masterAgent User?  @relation("AgentHierarchy", fields: [masterAgentId], references: [id])
+  subAgents   User[] @relation("AgentHierarchy")
+}
+
+model FleetOwner {
+  id            Int       @id @default(autoincrement())
+  companyName   String
+  contactPerson String
+  email         String    @unique
+  phone         String
+  address       String?
+  city          String?
+  state         String?
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        Int       @unique
+  user          User      @relation(fields: [userId], references: [id])
+  vehicles      Vehicle[]
+  drivers       Driver[]
+}
+
+model Vehicle {
+  id           Int             @id @default(autoincrement())
+  name         String
+  plate        String          @unique
+  category     VehicleCategory
+  status       VehicleStatus   @default(AVAILABLE)
+  pricePerHour Decimal
+  isElectric   Boolean         @default(true)
+  imageUrl     String?
+  fleetOwnerId Int
+  fleetOwner   FleetOwner      @relation(fields: [fleetOwnerId], references: [id])
+  drivers      Driver[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+enum BookingMode {
+  STRAIGHT
+  RESERVE
+  DEDICATED
+}
+
+// Redesigned from the original stub based on real Figma screens (see
+// BOOKING_STATUS.md). Only STRAIGHT mode has real business logic behind it
+// so far — RESERVE and DEDICATED are recognized values (so the field
+// exists and validates now) but the service layer returns a clear
+// "not yet available" error if selected, rather than silently accepting
+// a booking type we haven't scoped.
+//
+// Open questions flagged for confirmation, not guessed at silently:
+//  - startTime/endTime (the rental window used for pricing: hours x rate
+//    x vehicleCount) vs pickupTime/dropoffTime (trip-leg timestamps shown
+//    in the booking-details timeline) appeared as DISTINCT values in the
+//    screens. Modeled as separate fields here; confirm this is correct.
+//  - vehicleCount vs a specific Vehicle instance: the create flow lets the
+//    customer pick a category + a count ("2 economy cars"), not specific
+//    vehicles. Specific vehicle/driver assignment happens later (ops
+//    action), so there's no direct Vehicle FK here anymore — only
+//    vehicleCategory + vehicleCount, plus an optional single driverId once
+//    assigned. If multiple simultaneous drivers per booking turns out to
+//    be a real requirement, this will need a join table instead.
+model Booking {
+  id              Int             @id @default(autoincrement())
+  bookingMode     BookingMode     @default(STRAIGHT)
+  vehicleCategory VehicleCategory
+  vehicleCount    Int             @default(1)
+  customerName    String
+  customerPhone   String
+  pickupLocation  String
+  dropoffLocation String
+  startTime       DateTime
+  endTime         DateTime
+  pickupTime      DateTime?
+  dropoffTime     DateTime?
+  hoursBooked     Decimal
+  ratePerHour     Decimal
+  totalAmount     Decimal
+  priority        Boolean         @default(false)
+  status          BookingStatus   @default(PENDING)
+  driverId        Int?
+  driver          Driver?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  agentId         Int
+  agent           User            @relation("AgentBookings", fields: [agentId], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    Int
+  jti       String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model OTP {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  purpose   String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ── New models below: driver, enterprise, shipment, notification, wallet ──
+// These tables did not exist before — the original controllers returned
+// hardcoded mock data with no schema behind them at all. Modeling
+// decisions here are reasonable defaults, not confirmed business
+// requirements — flagged in the accompanying message so they can be
+// corrected before this ships.
+
+enum DriverStatus {
+  AVAILABLE
+  ON_TRIP
+  OFFLINE
+}
+
+// Assumption: a Driver belongs to exactly one FleetOwner (the company that
+// employs them), and can optionally be assigned to one Vehicle at a time.
+model Driver {
+  id            Int          @id @default(autoincrement())
+  name          String
+  phone         String       @unique
+  licenseNumber String       @unique
+  status        DriverStatus @default(AVAILABLE)
+  fleetOwnerId  Int
+  fleetOwner    FleetOwner   @relation(fields: [fleetOwnerId], references: [id])
+  vehicleId     Int?
+  vehicle       Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  shipments     Shipment[]
+  bookings      Booking[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+enum EnterpriseStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+// Assumption: mirrors the FleetOwner pattern — a one-to-one profile
+// attached to a User with role ENTERPRISE_PARTNER, holding
+// enterprise-specific fields the bare User record doesn't have.
+model Enterprise {
+  id           Int              @id @default(autoincrement())
+  name         String
+  contactEmail String           @unique
+  contactPhone String?
+  status       EnterpriseStatus @default(PENDING)
+  userId       Int              @unique
+  user         User             @relation(fields: [userId], references: [id])
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+enum ShipmentStatus {
+  PENDING
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+// Assumption: standalone from Booking for now (Booking stays stubbed per
+// your call). agentId is whoever created/manages the shipment; driverId is
+// optional until a driver is assigned. trackingCode is a short public-safe
+// code (distinct from the internal id) customers use to check status
+// without authenticating — see shipmentService.ts for generation.
+model Shipment {
+  id             Int            @id @default(autoincrement())
+  trackingCode   String         @unique
+  customerName   String
+  customerPhone  String?
+  pickupLocation String
+  destination    String
+  status         ShipmentStatus @default(PENDING)
+  agentId        Int
+  agent          User           @relation("AgentShipments", fields: [agentId], references: [id])
+  driverId       Int?
+  driver         Driver?        @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+enum NotificationType {
+  BOOKING
+  PAYMENT
+  SYSTEM
+}
+
+// Assumption: notifications belong to a single User (the recipient).
+model Notification {
+  id        Int              @id @default(autoincrement())
+  title     String
+  message   String
+  type      NotificationType @default(SYSTEM)
+  isRead    Boolean          @default(false)
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+}
+
+// Assumption: one Wallet per User (works whether that User is a fleet
+// owner, enterprise contact, or individual partner — all are Users).
+// A real ledger (WalletTransaction) backs the balance rather than letting
+// balance be edited directly, so there's an audit trail of how it changed.
+model Wallet {
+  id           Int                 @id @default(autoincrement())
+  balance      Decimal             @default(0)
+  currency     String              @default("NGN")
+  userId       Int                 @unique
+  user         User                @relation(fields: [userId], references: [id])
+  transactions WalletTransaction[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model WalletTransaction {
+  id          Int                   @id @default(autoincrement())
+  type        WalletTransactionType
+  amount      Decimal
+  reference   String                @unique
+  description String?
+  walletId    Int
+  wallet      Wallet                @relation(fields: [walletId], references: [id])
+  createdAt   DateTime              @default(now())
+}

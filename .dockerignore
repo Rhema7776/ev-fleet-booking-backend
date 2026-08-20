@@ -1,0 +1,30 @@
+# Dependencies (installed fresh inside the image)
+node_modules
+npm-debug.log*
+yarn-error.log*
+
+# Version control
+.git
+.gitignore
+
+# Secrets / local env
+.env
+.env.*
+
+# Build & test artifacts
+coverage
+dist
+
+# Docker files
+Dockerfile
+.dockerignore
+
+# Editor / OS cruft
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Misc project files not needed at runtime
+*.md
+prisma.config.ts.bak
