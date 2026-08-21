@@ -1,13 +1,14 @@
 import { z } from "zod";
 
-// Matches the Role enum in prisma/schema.prisma. Kept as a literal list here
-// (rather than importing the Prisma enum) so validation errors are readable
-// before Prisma is even involved.
-const ROLES = [
-  "ADMIN",
+// Matches the Role enum in prisma/schema.prisma, but only the subset
+// that's safe to self-assign at public registration. ADMIN, MASTER_AGENT,
+// and SUB_AGENT are deliberately excluded — those are privileged/managed
+// roles that should only ever be granted by an existing admin (via
+// PUT /api/v1/users/:id, which is already correctly ADMIN-gated), never
+// self-selected by anyone hitting the public /auth/register or
+// /auth/social-login endpoints.
+const SELF_REGISTERABLE_ROLES = [
   "FLEET_OWNER",
-  "MASTER_AGENT",
-  "SUB_AGENT",
   "INDIVIDUAL_PARTNER",
   "ENTERPRISE_PARTNER",
 ] as const;
@@ -18,7 +19,7 @@ export const registerSchema = z.object({
   fullName: z.string().trim().min(2, "Full name is too short."),
   email: z.string().trim().toLowerCase().email("Invalid email address."),
   phone: z.string().trim().min(7, "Invalid phone number."),
-  role: z.enum(ROLES),
+  role: z.enum(SELF_REGISTERABLE_ROLES),
 });
 
 export const loginSchema = z.object({
@@ -66,7 +67,7 @@ export const resetPasswordSchema = z
 export const socialLoginSchema = z.object({
   provider: z.enum(PROVIDERS),
   token: z.string().min(1, "Social provider token is required."),
-  role: z.enum(ROLES).optional(),
+  role: z.enum(SELF_REGISTERABLE_ROLES).optional(),
   fullName: z.string().optional(),
 });
 
