@@ -10,6 +10,7 @@ export const createVehicleSchema = z.object({
   pricePerHour: z.coerce.number().positive("Price per hour must be positive."),
   isElectric: z.boolean().optional().default(true),
   imageUrl: z.string().url("Invalid image URL.").optional(),
+  fleetOwnerId: z.coerce.number().int().positive().optional(),
 });
 
 export const updateVehicleSchema = z.object({

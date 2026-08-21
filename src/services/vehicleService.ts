@@ -60,8 +60,21 @@ class VehicleService {
     return vehicle;
   }
 
-  async create(userId: number, data: CreateVehicleInput) {
-    const fleetOwner = await this.requireFleetOwner(userId);
+  async create(userId: number, role: string | undefined, data: CreateVehicleInput) {
+    let fleetOwnerId: number;
+
+    if (role === "ADMIN" && data.fleetOwnerId) {
+      const targetFleetOwner = await prisma.fleetOwner.findUnique({
+        where: { id: data.fleetOwnerId },
+      });
+      if (!targetFleetOwner) {
+        throw ApiError.badRequest("The specified fleetOwnerId does not exist.");
+      }
+      fleetOwnerId = targetFleetOwner.id;
+    } else {
+      const ownFleetOwner = await this.requireFleetOwner(userId);
+      fleetOwnerId = ownFleetOwner.id;
+    }
 
     const existingPlate = await prisma.vehicle.findUnique({
       where: { plate: data.plate },
@@ -79,11 +92,10 @@ class VehicleService {
         pricePerHour: data.pricePerHour,
         isElectric: data.isElectric,
         imageUrl: data.imageUrl,
-        fleetOwnerId: fleetOwner.id,
+        fleetOwnerId,
       },
     });
   }
-
   /**
    'role' belongs to the authenticated user attempting the write.
     ADMIN can update any vehicle; a FLEET OWNER can only update their own.
@@ -146,5 +158,6 @@ class VehicleService {
     }
   }
 }
+
 
 export default new VehicleService();

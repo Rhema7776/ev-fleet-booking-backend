@@ -20,7 +20,7 @@ export const getVehicleById = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const createVehicle = asyncHandler(async (req: Request, res: Response) => {
-  const vehicle = await vehicleService.create(req.user!.id, req.body);
+  const vehicle = await vehicleService.create(req.user!.id, req.user!.role, req.body);
   return sendSuccess(res, 201, "Vehicle created successfully.", vehicle);
 });
 
