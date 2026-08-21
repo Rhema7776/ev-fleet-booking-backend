@@ -22,6 +22,14 @@ import bookingRoutes from "./routes/bookingRoutes";
 import bankRoutes from "./routes/bankRoutes";
 
 const app = express();
+// Render (and most PaaS platforms) sit the app behind a reverse proxy,
+// which forwards the real client IP via X-Forwarded-For. Express doesn't
+// trust that header by default (correctly — blindly trusting it would let
+// anyone spoof their IP by just setting the header themselves). Without
+// this, express-rate-limit can't reliably tell users apart by IP, which
+// either breaks per-user rate limiting or throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+// `1` means "trust exactly one hop" — Render's own proxy, not further chains.
+app.set("trust proxy", 1);
 
 app.use(helmet());
 app.use(cors());
