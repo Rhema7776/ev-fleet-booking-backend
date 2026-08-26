@@ -29,6 +29,7 @@ enum VehicleStatus {
   RESERVED
   BOOKED
   UNAVAILABLE
+  DEDICATED
 }
 
 enum VehicleCategory {
@@ -57,6 +58,7 @@ model User {
   masterAgentId Int?
 
   bookings      Booking[]      @relation("AgentBookings")
+  dedicatedSubscriptions DedicatedSubscription[]
   fleetOwner    FleetOwner?
   refreshTokens RefreshToken[]
   enterprise    Enterprise?
@@ -99,41 +101,53 @@ model Vehicle {
   fleetOwnerId Int
   fleetOwner   FleetOwner      @relation(fields: [fleetOwnerId], references: [id])
   drivers      Driver[]
+  dedicatedSubscriptions DedicatedSubscription[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 }
 
+model DedicatedSubscription {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  vehicleId Int
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+
+  monthlyRate Decimal
+  status      DedicatedSubscriptionStatus @default(PENDING_PAYMENT)
+
+  startDate       DateTime?
+  nextPaymentDate DateTime?
+
+  paystackReference String @unique
+
+  bookings Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum DedicatedSubscriptionStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
 enum BookingMode {
   STRAIGHT
   RESERVE
   DEDICATED
 }
 
-// Redesigned from the original stub based on real Figma screens (see
-// BOOKING_STATUS.md). Only STRAIGHT mode has real business logic behind it
-// so far — RESERVE and DEDICATED are recognized values (so the field
-// exists and validates now) but the service layer returns a clear
-// "not yet available" error if selected, rather than silently accepting
-// a booking type we haven't scoped.
-//
-// Open questions flagged for confirmation, not guessed at silently:
-//  - startTime/endTime (the rental window used for pricing: hours x rate
-//    x vehicleCount) vs pickupTime/dropoffTime (trip-leg timestamps shown
-//    in the booking-details timeline) appeared as DISTINCT values in the
-//    screens. Modeled as separate fields here; confirm this is correct.
-//  - vehicleCount vs a specific Vehicle instance: the create flow lets the
-//    customer pick a category + a count ("2 economy cars"), not specific
-//    vehicles. Specific vehicle/driver assignment happens later (ops
-//    action), so there's no direct Vehicle FK here anymore — only
-//    vehicleCategory + vehicleCount, plus an optional single driverId once
-//    assigned. If multiple simultaneous drivers per booking turns out to
-//    be a real requirement, this will need a join table instead.
 model Booking {
   id              Int             @id @default(autoincrement())
   bookingMode     BookingMode     @default(STRAIGHT)
   vehicleCategory VehicleCategory
   vehicleCount    Int             @default(1)
   customerName    String
+  dedicatedSubscriptionId Int?
+  dedicatedSubscription   DedicatedSubscription? @relation(fields: [dedicatedSubscriptionId], references: [id])
   customerPhone   String
   pickupLocation  String
   dropoffLocation String
@@ -153,6 +167,7 @@ model Booking {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 }
+
 
 model RefreshToken {
   id        String   @id @default(uuid())
@@ -180,13 +195,6 @@ enum BookingStatus {
   COMPLETED
   CANCELLED
 }
-
-// ── New models below: driver, enterprise, shipment, notification, wallet ──
-// These tables did not exist before — the original controllers returned
-// hardcoded mock data with no schema behind them at all. Modeling
-// decisions here are reasonable defaults, not confirmed business
-// requirements — flagged in the accompanying message so they can be
-// corrected before this ships.
 
 enum DriverStatus {
   AVAILABLE
@@ -218,7 +226,7 @@ enum EnterpriseStatus {
   SUSPENDED
 }
 
-// Assumption: mirrors the FleetOwner pattern — a one-to-one profile
+// Assumption: mirrors the FleetOwner pattern : a one-to-one profile
 // attached to a User with role ENTERPRISE_PARTNER, holding
 // enterprise-specific fields the bare User record doesn't have.
 model Enterprise {
@@ -240,11 +248,11 @@ enum ShipmentStatus {
   CANCELLED
 }
 
-// Assumption: standalone from Booking for now (Booking stays stubbed per
-// your call). agentId is whoever created/manages the shipment; driverId is
+// Assumption: standalone from Booking for now (Booking stays stubbed
+//  ). agentId is whoever created/manages the shipment; driverId is
 // optional until a driver is assigned. trackingCode is a short public-safe
 // code (distinct from the internal id) customers use to check status
-// without authenticating — see shipmentService.ts for generation.
+// without authenticating. See shipmentService.ts for generation.
 model Shipment {
   id             Int            @id @default(autoincrement())
   trackingCode   String         @unique
@@ -283,11 +291,6 @@ enum WalletTransactionType {
   CREDIT
   DEBIT
 }
-
-// Assumption: one Wallet per User (works whether that User is a fleet
-// owner, enterprise contact, or individual partner — all are Users).
-// A real ledger (WalletTransaction) backs the balance rather than letting
-// balance be edited directly, so there's an audit trail of how it changed.
 model Wallet {
   id           Int                 @id @default(autoincrement())
   balance      Decimal             @default(0)
