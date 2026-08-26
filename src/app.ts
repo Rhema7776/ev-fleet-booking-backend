@@ -20,8 +20,10 @@ import fleetOwnerRoutes from "./routes/fleetOwnerRoutes";
 import userRoutes from "./routes/userRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
 import bankRoutes from "./routes/bankRoutes";
+import dedicatedRoutes from "./routes/dedicatedRoutes";
 
 const app = express();
+
 // Render (and most PaaS platforms) sit the app behind a reverse proxy,
 // which forwards the real client IP via X-Forwarded-For. Express doesn't
 // trust that header by default (correctly — blindly trusting it would let
@@ -33,7 +35,18 @@ app.set("trust proxy", 1);
 
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+app.use(
+  express.json({
+    // Captures the exact raw bytes alongside the normal parsed body —
+    // needed for Paystack webhook signature verification, which is an
+    // HMAC over the raw request, not the parsed object (see
+    // paystackWebhookAuth.ts). Every other route just uses req.body as
+    // normal; this doesn't change existing behavior anywhere else.
+    verify: (req, _res, buf) => {
+      (req as express.Request).rawBody = buf;
+    },
+  })
+);
 
 // Basic abuse protection. Auth routes get a tighter limit since those are
 // the endpoints most worth rate-limiting (login/OTP brute-forcing).
@@ -70,6 +83,7 @@ app.use("/api/v1/vehicles", vehicleRoutes);
 app.use("/api/v1/drivers", driverRoutes);
 app.use("/api/v1/shipments", shipmentRoutes);
 app.use("/api/v1/bookings", bookingRoutes);
+app.use("/api/v1/dedicated", dedicatedRoutes);
 app.use("/api/v1/wallet", walletRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 
