@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
+import { verifyEnterprise } from "./verificationService";
 import type {
   CreateEnterpriseInput,
   UpdateEnterpriseInput,
@@ -39,7 +40,7 @@ class EnterpriseService {
     return enterprise;
   }
 
-  /** A user will create their own enterprise profile . one for every user, like FleetOwner. */
+  /** A user creates their own enterprise profile — one per user, like FleetOwner. */
   async create(userId: number, data: CreateEnterpriseInput) {
     const existingForUser = await prisma.enterprise.findUnique({ where: { userId } });
 
@@ -55,14 +56,23 @@ class EnterpriseService {
       throw ApiError.conflict("An enterprise with this contact email already exists.");
     }
 
-    return prisma.enterprise.create({
+    const enterprise = await prisma.enterprise.create({
       data: {
         name: data.name,
         contactEmail: data.contactEmail,
         contactPhone: data.contactPhone,
+        rcNumber: data.rcNumber,
         userId,
       },
     });
+
+    // Fire-and-forget — see the same pattern in fleetOwnerService's
+    // createSelf() for the full reasoning.
+    verifyEnterprise(enterprise.id).catch((error) => {
+      console.error("Enterprise verification failed to run:", error);
+    });
+
+    return enterprise;
   }
 
   async update(id: number, userId: number, role: string | undefined, data: UpdateEnterpriseInput) {

@@ -37,7 +37,13 @@ enum VehicleCategory {
   EXECUTIVE
   VIP
 }
-
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  FLAGGED
+  MANUALLY_APPROVED
+  REJECTED
+}
 model User {
   id       Int     @id @default(autoincrement())
   fullName String
@@ -81,6 +87,11 @@ model FleetOwner {
   state         String?
   isVerified    Boolean   @default(false)
   isActive      Boolean   @default(true)
+  rcNumber              String?
+  verificationStatus    VerificationStatus @default(PENDING)
+  verifiedBusinessName  String?
+  verificationCheckedAt DateTime?
+  verificationNotes     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   userId        Int       @unique
@@ -235,6 +246,11 @@ model Enterprise {
   contactEmail String           @unique
   contactPhone String?
   status       EnterpriseStatus @default(PENDING)
+  rcNumber              String?
+  verificationStatus    VerificationStatus @default(PENDING)
+  verifiedBusinessName  String?
+  verificationCheckedAt DateTime?
+  verificationNotes     String?
   userId       Int              @unique
   user         User             @relation(fields: [userId], references: [id])
   createdAt    DateTime         @default(now())

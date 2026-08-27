@@ -1,8 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
+import { verifyFleetOwner } from "./verificationService";
 import type {
   CreateFleetOwnerInput,
+  CreateSelfFleetOwnerInput,
   UpdateFleetOwnerInput,
   ListFleetOwnersQuery,
 } from "../validators/fleetOwnerValidator";
@@ -74,9 +76,57 @@ class FleetOwnerService {
         address: data.address,
         city: data.city,
         state: data.state,
+        rcNumber: data.rcNumber,
         userId: data.userId,
       },
     });
+  }
+
+  /**
+   * Self-service — a real fleet owner creating their OWN profile during
+   * their own signup. Mirrors Enterprise's existing self-service create()
+   * pattern exactly, since that's the correct, already-established
+   * approach for this kind of thing.
+   */
+  async createSelf(userId: number, data: CreateSelfFleetOwnerInput) {
+    const existingForUser = await prisma.fleetOwner.findUnique({ where: { userId } });
+
+    if (existingForUser) {
+      throw ApiError.conflict("You already have a fleet owner profile.");
+    }
+
+    const existingEmail = await prisma.fleetOwner.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existingEmail) {
+      throw ApiError.conflict("A fleet owner with this email already exists.");
+    }
+
+    const fleetOwner = await prisma.fleetOwner.create({
+      data: {
+        companyName: data.companyName,
+        contactPerson: data.contactPerson,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        rcNumber: data.rcNumber,
+        userId,
+      },
+    });
+
+    // Fire-and-forget — verification shouldn't make the registration
+    // response wait on a third-party API call. Errors here are caught
+    // and logged inside verifyFleetOwner itself via the provider's own
+    // try/catch (a failed check just leaves verificationStatus at its
+    // PENDING default, not an unhandled rejection).
+    verifyFleetOwner(fleetOwner.id).catch((error) => {
+      console.error("Fleet owner verification failed to run:", error);
+    });
+
+    return fleetOwner;
   }
 
   async update(

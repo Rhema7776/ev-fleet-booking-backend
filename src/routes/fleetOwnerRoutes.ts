@@ -3,6 +3,7 @@ import {
   getFleetOwners,
   getFleetOwnerById,
   createFleetOwner,
+  createSelfFleetOwner,
   updateFleetOwner,
   deleteFleetOwner,
 } from "../controllers/fleetOwnerController";
@@ -11,6 +12,7 @@ import { authorize } from "../middleware/roleMiddleware";
 import { validateRequest } from "../middleware/validateRequest";
 import {
   createFleetOwnerSchema,
+  createSelfFleetOwnerSchema,
   updateFleetOwnerSchema,
   fleetOwnerIdParamSchema,
   listFleetOwnersQuerySchema,
@@ -124,6 +126,57 @@ router.post(
   validateRequest(createFleetOwnerSchema),
   createFleetOwner
 );
+
+/**
+ * @swagger
+ * /api/v1/fleet-owners/me:
+ *   post:
+ *     tags:
+ *       - Fleet Owners
+ *     summary: Create your own fleet owner profile (self-service)
+ *     description: >
+ *       A real fleet owner creating their OWN profile during their own
+ *       signup — no admin/master-agent role required, unlike POST /.
+ *       Triggers automatic CAC verification against the provided
+ *       rcNumber, same as the admin-provisioned path.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - companyName
+ *               - contactPerson
+ *               - email
+ *               - phone
+ *               - rcNumber
+ *             properties:
+ *               companyName:
+ *                 type: string
+ *               contactPerson:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *               city:
+ *                 type: string
+ *               state:
+ *                 type: string
+ *               rcNumber:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Fleet owner profile created successfully
+ *       409:
+ *         description: This user (or this email) already has a profile
+ */
+router.post("/me", validateRequest(createSelfFleetOwnerSchema), createSelfFleetOwner);
 
 /**
  * @swagger

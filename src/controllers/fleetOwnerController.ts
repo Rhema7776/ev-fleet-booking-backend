@@ -5,6 +5,7 @@ import fleetOwnerService from "../services/fleetOwnerService";
 import type {
   ListFleetOwnersQuery,
   FleetOwnerIdParam,
+  CreateSelfFleetOwnerInput,
 } from "../validators/fleetOwnerValidator";
 
 export const getFleetOwners = asyncHandler(async (req: Request, res: Response) => {
@@ -21,6 +22,12 @@ export const getFleetOwnerById = asyncHandler(async (req: Request, res: Response
 export const createFleetOwner = asyncHandler(async (req: Request, res: Response) => {
   const fleetOwner = await fleetOwnerService.create(req.body);
   return sendSuccess(res, 201, "Fleet owner created successfully.", fleetOwner);
+});
+
+export const createSelfFleetOwner = asyncHandler(async (req: Request, res: Response) => {
+  const data = req.body as CreateSelfFleetOwnerInput;
+  const fleetOwner = await fleetOwnerService.createSelf(req.user!.id, data);
+  return sendSuccess(res, 201, "Fleet owner profile created successfully.", fleetOwner);
 });
 
 export const updateFleetOwner = asyncHandler(async (req: Request, res: Response) => {

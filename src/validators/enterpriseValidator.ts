@@ -6,6 +6,10 @@ export const createEnterpriseSchema = z.object({
   name: z.string().trim().min(2, "Enterprise name is too short."),
   contactEmail: z.string().trim().toLowerCase().email("Invalid email address."),
   contactPhone: z.string().trim().min(7).optional(),
+  // Required — without it, there's nothing for the automatic CAC
+  // verification to check against, and the whole point of this field
+  // existing is that verification actually runs.
+  rcNumber: z.string().trim().min(2, "RC number is required."),
 });
 
 export const updateEnterpriseSchema = z.object({
