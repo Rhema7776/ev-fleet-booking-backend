@@ -120,6 +120,7 @@ class VehicleService {
 
     return prisma.vehicle.update({ where: { id }, data });
   }
+
   /**
    * Updates imageUrl on an already-created vehicle. Kept as a separate
    * step from create() deliberately — the original create-vehicle
@@ -139,6 +140,7 @@ class VehicleService {
 
     return prisma.vehicle.update({ where: { id }, data: { imageUrl } });
   }
+
   async remove(id: number, userId: number, role: string | undefined) {
     const vehicle = await this.getById(id);
     await this.assertOwnershipOrAdmin(vehicle.fleetOwnerId, userId, role);

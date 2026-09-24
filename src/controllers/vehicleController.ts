@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../middleware/asyncHandler";
 import { sendSuccess } from "../utils/ApiResponse";
+import { ApiError } from "../utils/ApiError";
 import vehicleService from "../services/vehicleService";
+import { uploadVehicleImage as uploadToStorage } from "../lib/supabaseStorage";
 import type { ListVehiclesQuery, VehicleIdParam } from "../validators/vehicleValidator";
 
 export const getVehicles = asyncHandler(async (req: Request, res: Response) => {
@@ -39,4 +41,33 @@ export const deleteVehicle = asyncHandler(async (req: Request, res: Response) =>
   const { id } = req.params as unknown as VehicleIdParam;
   await vehicleService.remove(id, req.user!.id, req.user!.role);
   return sendSuccess(res, 200, "Vehicle deleted successfully.");
+});
+
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+export const uploadVehicleImage = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params as unknown as VehicleIdParam;
+
+  if (!req.file) {
+    throw ApiError.badRequest("No image file provided.");
+  }
+
+  if (!ALLOWED_MIME_TYPES.includes(req.file.mimetype)) {
+    throw ApiError.badRequest("Image must be JPEG, PNG, or WebP.");
+  }
+
+  const imageUrl = await uploadToStorage(
+    req.file.buffer,
+    req.file.originalname,
+    req.file.mimetype
+  );
+
+  const vehicle = await vehicleService.attachImage(
+    id,
+    req.user!.id,
+    req.user!.role,
+    imageUrl
+  );
+
+  return sendSuccess(res, 200, "Vehicle image uploaded successfully.", vehicle);
 });

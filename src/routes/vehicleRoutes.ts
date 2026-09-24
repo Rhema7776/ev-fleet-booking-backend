@@ -1,10 +1,12 @@
 import express from "express";
+import multer from "multer";
 import {
   getVehicles,
   getVehicleById,
   createVehicle,
   updateVehicle,
   deleteVehicle,
+  uploadVehicleImage,
 } from "../controllers/vehicleController";
 import { authenticate } from "../middleware/authMiddleware";
 import { authorize } from "../middleware/roleMiddleware";
@@ -17,6 +19,16 @@ import {
 } from "../validators/vehicleValidator";
 
 const router = express.Router();
+
+// Memory storage, not disk — Render's free-tier filesystem is ephemeral
+// (wiped on every redeploy/spin-down), so anything written to local disk
+// would be lost. The buffer goes straight to Supabase Storage instead
+// (see uploadVehicleImage in the controller); nothing is ever persisted
+// to this server's own disk.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB, matching the frontend's own limit
+});
 
 router.use(authenticate);
 
@@ -193,6 +205,50 @@ router.delete(
   authorize("FLEET_OWNER", "ADMIN"),
   validateRequest(vehicleIdParamSchema, "params"),
   deleteVehicle
+);
+
+/**
+ * @swagger
+ * /api/v1/vehicles/{id}/image:
+ *   post:
+ *     tags:
+ *       - Vehicles
+ *     summary: Upload a vehicle photo
+ *     description: Attaches a real photo to an already-created vehicle. Only the owning fleet owner (or an admin) can do this.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Vehicle image uploaded successfully
+ *       400:
+ *         description: Missing or invalid image file
+ *       403:
+ *         description: Not the owning fleet owner
+ *       404:
+ *         description: Vehicle not found
+ */
+router.post(
+  "/:id/image",
+  authorize("FLEET_OWNER", "ADMIN"),
+  validateRequest(vehicleIdParamSchema, "params"),
+  upload.single("image"),
+  uploadVehicleImage
 );
 
 export default router;
