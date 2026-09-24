@@ -21,6 +21,22 @@ import type {
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 class AuthService {
+  /**
+   * Computes whether this user already has a matching FleetOwner profile
+   * row. Only meaningful for role === "FLEET_OWNER", but safe to compute
+   * for anyone (just resolves false for everyone else).
+   *
+   * Added because role FLEET_OWNER and a real FleetOwner row are two
+   * independent things in this schema — nothing enforces they stay in
+   * sync. Surfacing this on every login/social-login response, rather
+   * than only checking it lazily inside vehicleService.requireFleetOwner,
+   * lets the frontend redirect someone to finish their profile BEFORE
+   * they land on a screen that will 403 on them.
+   */
+  private async hasFleetOwnerProfile(userId: number): Promise<boolean> {
+    const fleetOwner = await prisma.fleetOwner.findUnique({ where: { userId } });
+    return fleetOwner !== null;
+  }
   async register(data: RegisterInput) {
     const { fullName, email, phone, role } = data;
 
@@ -82,6 +98,7 @@ class AuthService {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
+        hasFleetOwnerProfile: await this.hasFleetOwnerProfile(user.id),
       },
     };
   }
@@ -239,6 +256,7 @@ class AuthService {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
+        hasFleetOwnerProfile: await this.hasFleetOwnerProfile(user.id),
       },
     };
   }
