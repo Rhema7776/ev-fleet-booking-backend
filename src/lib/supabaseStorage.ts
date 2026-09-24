@@ -27,16 +27,28 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-  // Deliberately a warning, not a thrown error at import time — the rest
-  // of the app (vehicles, bookings, auth, everything not touching images)
-  // should keep working even if this one feature isn't configured yet.
-  console.warn(
-    "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set. Vehicle image uploads will fail until both are configured."
-  );
-}
+// Lazily created, NOT at module load time. Creating this eagerly at
+// import time was a real bug: the Supabase SDK throws synchronously if
+// the URL is missing/malformed, which meant a bad env var crashed the
+// entire backend on boot — not just this one feature, contradicting the
+// "rest of the app should keep working" intent below. Deferring
+// construction until an upload is actually attempted means a missing
+// env var only breaks image uploads specifically; everything else
+// (auth, bookings, vehicles without a photo) keeps working.
+let supabaseClient: ReturnType<typeof createClient> | null = null;
 
-const supabase = createClient(supabaseUrl ?? "", supabaseServiceRoleKey ?? "");
+function getSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error(
+      "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set — vehicle image uploads are unavailable until both are configured."
+    );
+  }
+
+  supabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+  return supabaseClient;
+}
 
 const VEHICLE_IMAGES_BUCKET = "vehicle-images";
 
@@ -45,6 +57,8 @@ export async function uploadVehicleImage(
   originalFileName: string,
   mimeType: string
 ): Promise<string> {
+  const supabase = getSupabaseClient();
+
   // Prefixed with a timestamp so two vehicles named the same thing (or
   // the same vehicle re-uploaded) never collide on the storage path.
   const safeName = originalFileName.replace(/[^a-zA-Z0-9._-]/g, "_");
