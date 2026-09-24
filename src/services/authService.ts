@@ -200,9 +200,19 @@ class AuthService {
       if (user.authProvider === provider && user.providerId === socialUser.providerId) {
         // Existing account, same provider — continue to login below.
       } else if (user.authProvider === "LOCAL") {
-        throw ApiError.conflict(
-          "An account already exists with this email. Please log in with your email and password."
-        );
+        // Account linking: a verified social login accessing an existing
+        // password account. Safe specifically because socialUser.emailVerified
+        // was already confirmed above — the provider has already proven this
+        // person controls the email address, which is the same trust basis
+        // every "Continue with Google" flow on a password-based site relies
+        // on (Vercel, GitHub, etc.). Deliberately NOT overwriting
+        // authProvider/providerId here — this adds Google/Facebook as an
+        // additional way in without touching the account's password login,
+        // which keeps working exactly as before.
+        //
+        // Trade-off worth being explicit about: anyone who compromises this
+        // Google/Facebook account can now also reach this password account.
+        // Accepted here as a deliberate choice, not an oversight.
       } else {
         throw ApiError.conflict(
           `This email is already registered with ${user.authProvider}.`
